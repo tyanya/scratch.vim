@@ -18,14 +18,19 @@ function! s:deactivate_autocmds()
   augroup END
 endfunction
 
-function! s:open_window(position)
+function! s:open_window(position, scratch_filetype)
   " open scratch buffer window and move to it. this will create the buffer if
   " necessary.
-  let scr_bufnr = bufnr('__Scratch__')
+  if a:scratch_filetype == 'scratch'
+    let buf_name = '__Scratch__'
+  else
+    let buf_name = '__' . a:scratch_filetype . '__'
+  endif
+  let scr_bufnr = bufnr(buf_name)
   if scr_bufnr == -1
     let cmd = g:scratch_horizontal ? 'new' : 'vnew'
-    execute a:position . s:resolve_size(g:scratch_height) . cmd . ' __Scratch__'
-    execute 'setlocal filetype=' . g:scratch_filetype
+    execute a:position . s:resolve_size(g:scratch_height) . cmd . ' ' . buf_name
+    execute 'setlocal filetype=' . a:scratch_filetype
     setlocal bufhidden=hide
     setlocal nobuflisted
     setlocal buftype=nofile
@@ -64,7 +69,7 @@ function! s:close_window(force)
   endif
   if a:force
     let prev_bufnr = bufnr('#')
-    let scr_bufnr = bufnr('__Scratch__')
+    let scr_bufnr = bufnr(buf_name)
     if scr_bufnr != -1
       " Temporarily deactivate these autocommands to prevent overflow, but
       " still allow other autocommands to be executed.
@@ -118,14 +123,15 @@ endfunction
 
 " public functions
 
-function! scratch#open(reset)
+function! scratch#open(reset, ...)
   " sanity check and open scratch buffer
   if bufname('%') ==# '[Command Line]'
     echoerr 'Unable to open scratch buffer from command line window.'
     return
   endif
   let position = g:scratch_top ? 'topleft ' : 'botright '
-  call s:open_window(position)
+  let scratch_filetype = get(a:, 1, g:scratch_filetype)
+  call s:open_window(position, scratch_filetype)
   if a:reset
     silent execute '%d _'
   else
@@ -133,9 +139,10 @@ function! scratch#open(reset)
   endif
 endfunction
 
-function! scratch#insert(reset)
+function! scratch#insert(reset, ...)
   " open scratch buffer
-  call scratch#open(a:reset)
+  let scratch_filetype = get(a:, 1, g:scratch_filetype)
+  call scratch#open(a:reset, scratch_filetype)
   if g:scratch_insert_autohide
     augroup ScratchInsertAutoHide
       autocmd!
@@ -145,10 +152,11 @@ function! scratch#insert(reset)
   startinsert!
 endfunction
 
-function! scratch#selection(reset) range
+function! scratch#selection(reset, ... ) range
   " paste selection in scratch buffer
   let selection = s:get_selection()
-  call scratch#open(a:reset)
+  let scratch_filetype = get(a:, 1, g:scratch_filetype)
+  call scratch#open(a:reset, scratch_filetype)
   let last_scratch_line = line('$')
   if last_scratch_line ==# 1 && !strlen(getline(1))
     " line is empty, we overwrite it
@@ -162,15 +170,21 @@ function! scratch#selection(reset) range
   silent! execute '%s/\s\+$/'
 endfunction
 
-function! scratch#preview()
+function! scratch#preview( ... )
   " toggle scratch window, keeping cursor in current window
-  let scr_winnr = bufwinnr('__Scratch__')
+  let scratch_filetype = get(a:, 1, g:scratch_filetype)
+  if scratch_filetype == 'scratch'
+    let buf_name = '__Scratch__'
+  else
+    let buf_name = '__' . scratch_filetype . '__'
+  endif
+  let scr_winnr = bufwinnr(buf_name)
   if scr_winnr != -1
     execute scr_winnr . 'close'
   else
-    call scratch#open(0)
+    call scratch#open(0, scratch_filetype)
     call s:deactivate_autocmds()
     execute bufwinnr(bufnr('#')) . 'wincmd w'
-    call s:activate_autocmds(bufnr('__Scratch__'))
+    call s:activate_autocmds(bufnr(buf_name))
   endif
 endfunction
